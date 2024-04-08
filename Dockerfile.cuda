@@ -1,0 +1,12 @@
+FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime
+ADD src /app
+ADD requirements.txt /app
+WORKDIR /app
+RUN pip install  transformers
+RUN pip install -r requirements.txt
+
+ENV NOSTR_CONNECT_GRPC_BINDING_ADDRESS="127.0.0.1"
+ENV NOSTR_CONNECT_GRPC_BINDING_PORT="5000"
+ENV DEVICE="-1"
+
+CMD ["python", "main.py"]
