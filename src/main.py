@@ -6,6 +6,12 @@ from openagents_service_provider_proto import rpc_pb2
 import time
 import grpc
 
+
+def log(rpcClient, message, jobId=None):
+    print(message)
+    if rpcClient and jobId: 
+        rpcClient.logForJob(rpc_pb2.RpcJobLog(jobId=jobId, log=message))
+
 class Translator:
     FLORES_MAPPING = {'en': 'eng_Latn', 'ceb': 'ceb_Latn', 'de': 'deu_Latn', 'sv': 'swe_Latn', 'fr': 'fra_Latn', 'nl': 'nld_Latn', 'ru': 'rus_Cyrl', 'es': 'spa_Latn',
                   'it': 'ita_Latn', 'pl': 'pol_Latn', 'ja': 'jpn_Jpan', 'zh': 'zho_Hans', 'uk': 'ukr_Cyrl', 'vi': 'vie_Latn', 'ar': 'arb_Arab',
@@ -23,9 +29,11 @@ class Translator:
                   'mt': 'mlt_Latn', 'lo': 'lao_Laoo', 'xh': 'xho_Latn', 'sm': 'smo_Latn', 'ny': 'nya_Latn', 'st': 'sot_Latn'}
 
     def __init__(self, device=-1):
+        now = time.time()
         model = 'facebook/nllb-200-distilled-600M'
-        print("Loading", model, "on device", device)
+        log(None, "Loading "+ model + " on device "+str(device))
         self.translator = pipeline('translation',  model, device=device)
+        log(None, "Model loaded in "+str(time.time()-now)+" seconds")
 
     def _l(self, lang):
         return self.FLORES_MAPPING[lang]
@@ -36,19 +44,20 @@ class Translator:
     def translate(self,tx, fromLang, toLang):        
         fromLang = self._l(fromLang)
         toLang = self._l(toLang)
-        print("Translate from", fromLang, "to", toLang)
         output = self.translator(tx, src_lang=fromLang, tgt_lang=toLang)
         output = output[0]['translation_text']
         return output
 
 
+
+    
 def completePendingJob(rpcClient , translator):
     jobs=[]
     jobs.extend(rpcClient.getPendingJobs(rpc_pb2.RpcGetPendingJobs(filterByKind="5002")).jobs)
     jobs.extend(rpcClient.getPendingJobs(rpc_pb2.RpcGetPendingJobs(filterByRunOn="openagents\\/translate")).jobs)    
-    if len(jobs)>0 : print(len(jobs),"pending jobs")
-
+    if len(jobs)>0 : log(rpcClient, str(len(jobs))+" pending jobs")
     for job in jobs:
+        wasAccepted=False
         try:
             target_language = [x for x in job.param if x.key == "language" or x.key == "target_language"]
             target_language = "en" if len(target_language) == 0 else  target_language[0].value[0]
@@ -56,16 +65,20 @@ def completePendingJob(rpcClient , translator):
             source_language = [x for x in job.param if x.key == "source_language"]
             source_language = "en" if len(source_language) == 0 else source_language[0].value[0]
 
-            print("Translating from", source_language, "to", target_language)
             if translator.isLangSupported(target_language) and translator.isLangSupported(source_language):
+                wasAccepted = True
                 rpcClient.acceptJob(rpc_pb2.RpcAcceptJob(jobId=job.id))
-                rpcClient.logForJob(rpc_pb2.RpcJobLog(jobId=job.id, log="Translating from "+source_language+" to "+target_language))
+                log(rpcClient,"Translating from "+source_language+" to "+target_language, job.id)
+                now = time.time()
                 inputData = job.input[0].data
-                outputData = translator.translate(content, source_language, target_language)
+                outputData = translator.translate(inputData, source_language, target_language)
                 rpcClient.completeJob(rpc_pb2.RpcJobOutput(jobId=job.id, output=outputData))
+                log(rpcClient,"Translation completed in "+str(time.time()-now)+" seconds", job.id)
+                break
         except Exception as e:
-            print("Error accepting job", job.id, e)
-            rpcClient.cancelJob(rpc_pb2.RpcCancelJob(jobId=job.id, reason=str(e)))
+            log(rpcClient, "Error processing job "+ str(e), job.id if job else None)
+            if wasAccepted:
+                rpcClient.cancelJob(rpc_pb2.RpcCancelJob(jobId=job.id, reason=str(e)))
 
 
 def main():
@@ -76,13 +89,16 @@ def main():
     while True:
         try:
             with grpc.insecure_channel(NOSTR_CONNECT_GRPC_BINDING_ADDRESS+":"+str(NOSTR_CONNECT_GRPC_BINDING_PORT)) as channel:
-                print("Connected to "+NOSTR_CONNECT_GRPC_BINDING_ADDRESS+":"+str(NOSTR_CONNECT_GRPC_BINDING_PORT))
                 stub = rpc_pb2_grpc.NostrConnectorStub(channel)
+                log(stub, "Connected to "+NOSTR_CONNECT_GRPC_BINDING_ADDRESS+":"+str(NOSTR_CONNECT_GRPC_BINDING_PORT))
                 while True:
-                    completePendingJob(stub, t)
+                    try:
+                        completePendingJob(stub, t)
+                    except Exception as e:
+                        log(stub, "Error processing pending jobs "+ str(e), None)
                     time.sleep(100.0/1000.0)
         except Exception as e:
-            print("Error connecting to grpc server", e)
+            log(None,"Error connecting to grpc server "+ str(e))
             
        
 
