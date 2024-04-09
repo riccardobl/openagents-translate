@@ -7,6 +7,6 @@ RUN pip install -r requirements.txt
 
 ENV NOSTR_CONNECT_GRPC_BINDING_ADDRESS="127.0.0.1"
 ENV NOSTR_CONNECT_GRPC_BINDING_PORT="5000"
-ENV DEVICE="-1"
+ENV TRANSFORMERS_DEVICE="-1"
 
-CMD ["python", "main.py"]
+CMD ["python", "-u", "main.py"]

@@ -23,14 +23,15 @@ class Translator:
                   'mt': 'mlt_Latn', 'lo': 'lao_Laoo', 'xh': 'xho_Latn', 'sm': 'smo_Latn', 'ny': 'nya_Latn', 'st': 'sot_Latn'}
 
     def __init__(self, device=-1):
-        self.translator = pipeline('translation', 'facebook/nllb-200-distilled-600M', device=device)
+        model = 'facebook/nllb-200-distilled-600M'
+        print("Loading", model, "on device", device)
+        self.translator = pipeline('translation',  model, device=device)
 
     def _l(self, lang):
         return self.FLORES_MAPPING[lang]
 
     def isLangSupported(self, lang):
         return lang in  self.FLORES_MAPPING
-
 
     def translate(self,tx, fromLang, toLang):        
         fromLang = self._l(fromLang)
@@ -41,40 +42,34 @@ class Translator:
         return output
 
 
-def completePendingJob(stub , t):
+def completePendingJob(rpcClient , translator):
     jobs=[]
-    jobs.extend(stub.getPendingJobs(rpc_pb2.RpcGetPendingJobs(filterByKind="5002")).jobs)
-    jobs.extend(stub.getPendingJobs(rpc_pb2.RpcGetPendingJobs(filterByRunOn="openagents\\/translate")).jobs)    
-    if len(jobs)>0 : print("Pending jobs",jobs)
+    jobs.extend(rpcClient.getPendingJobs(rpc_pb2.RpcGetPendingJobs(filterByKind="5002")).jobs)
+    jobs.extend(rpcClient.getPendingJobs(rpc_pb2.RpcGetPendingJobs(filterByRunOn="openagents\\/translate")).jobs)    
+    if len(jobs)>0 : print(len(jobs),"pending jobs")
+
     for job in jobs:
         try:
             target_language = [x for x in job.param if x.key == "language" or x.key == "target_language"]
-            if len(target_language) == 0:
-                target_language = "en"
-            else:
-                target_language = target_language[0].value[0]
+            target_language = "en" if len(target_language) == 0 else  target_language[0].value[0]
 
             source_language = [x for x in job.param if x.key == "source_language"]
-            if len(source_language) == 0:
-                source_language = "en"
-            else:
-                source_language = source_language[0].value[0]
+            source_language = "en" if len(source_language) == 0 else source_language[0].value[0]
 
             print("Translating from", source_language, "to", target_language)
-            if t.isLangSupported(target_language) and t.isLangSupported(source_language):
-                stub.acceptJob(rpc_pb2.RpcAcceptJob(jobId=job.id))
-                stub.logForJob(rpc_pb2.RpcJobLog(jobId=job.id, log="Translating from "+source_language+" to "+target_language))
-                i=job.input[0]
-                content = i.data
-                out = t.translate(content, source_language, target_language)
-                stub.completeJob(rpc_pb2.RpcJobOutput(jobId=job.id, output=out))
+            if translator.isLangSupported(target_language) and translator.isLangSupported(source_language):
+                rpcClient.acceptJob(rpc_pb2.RpcAcceptJob(jobId=job.id))
+                rpcClient.logForJob(rpc_pb2.RpcJobLog(jobId=job.id, log="Translating from "+source_language+" to "+target_language))
+                inputData = job.input[0].data
+                outputData = translator.translate(content, source_language, target_language)
+                rpcClient.completeJob(rpc_pb2.RpcJobOutput(jobId=job.id, output=outputData))
         except Exception as e:
             print("Error accepting job", job.id, e)
-            stub.cancelJob(rpc_pb2.RpcCancelJob(jobId=job.id, reason=str(e)))
+            rpcClient.cancelJob(rpc_pb2.RpcCancelJob(jobId=job.id, reason=str(e)))
 
 
 def main():
-    DEVICE = int(os.getenv('DEVICE', "-1"))
+    DEVICE = int(os.getenv('TRANSFORMERS_DEVICE', "-1"))
     NOSTR_CONNECT_GRPC_BINDING_ADDRESS = os.getenv('NOSTR_CONNECT_GRPC_BINDING_ADDRESS', "127.0.0.1")
     NOSTR_CONNECT_GRPC_BINDING_PORT = int(os.getenv('NOSTR_CONNECT_GRPC_BINDING_PORT', "5000"))
     t = Translator(DEVICE)
