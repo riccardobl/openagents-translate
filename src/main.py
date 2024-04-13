@@ -1,8 +1,8 @@
 from transformers import pipeline
 import os
 import yaml
-from openagents_service_provider_proto import rpc_pb2_grpc
-from openagents_service_provider_proto import rpc_pb2
+from openagents_grpc_proto import rpc_pb2_grpc
+from openagents_grpc_proto import rpc_pb2
 import time
 import grpc
 
@@ -81,10 +81,65 @@ def completePendingJob(rpcClient , translator):
                 rpcClient.cancelJob(rpc_pb2.RpcCancelJob(jobId=job.id, reason=str(e)))
 
 
+TEMPLATES = [
+    {
+        "nextAnnouncementTimestamp":0,
+        "template":"""
+        {
+            "kind": 5003,
+            "tags": [
+                ["param","run-on", "openagents/translate" ],              
+                ["param", "source_language", "%SOURCE_LANG%"],
+                ["param", "target_language", "%TARGET_LANG%" ],
+                ["i","%INPUT%"]
+            ]
+        }
+        """
+    },
+    {
+        "nextAnnouncementTimestamp":0,
+        "template":"""
+        {
+            "kind": 5002,
+            "tags": [
+                ["param","language","%TARGET_LANG%"],
+                [ "i", "%INPUT%" ]
+            ]
+        }
+        """
+    }
+
+]
+NEXT_NODE_ANNOUNCE=0
+
+def announce(rpcClient):    
+    # Announce node
+    global NEXT_NODE_ANNOUNCE
+    time_ms=int(time.time()*1000)
+    if time_ms >= NEXT_NODE_ANNOUNCE:
+        ICON = os.getenv('NODE_ICON', "")
+        NAME = os.getenv('NODE_NAME', "Translator Node")
+        DESCRIPTION = os.getenv('NODE_DESCRIPTION', "Translate text from one language to another")
+        
+        res=rpcClient.announceNode(rpc_pb2.RpcAnnounceNodeRequest(
+            iconUrl = ICON,
+            name = NAME,
+            description = DESCRIPTION,
+        ))
+        NEXT_NODE_ANNOUNCE = int(time.time()*1000) + res.refreshInterval
+    
+    # Announce templates
+    for template in TEMPLATES:
+        if time_ms >= template["nextAnnouncementTimestamp"]:
+            res = rpcClient.announceEventTemplate(rpc_pb2.RpcAnnounceTemplateRequest(eventTemplate=template["template"]))
+            template["nextAnnouncementTimestamp"] = int(time.time()*1000) + res.refreshInterval
+
+
+
 def main():
     DEVICE = int(os.getenv('TRANSFORMERS_DEVICE', "-1"))
-    NOSTR_CONNECT_GRPC_BINDING_ADDRESS = os.getenv('NOSTR_CONNECT_GRPC_BINDING_ADDRESS', "127.0.0.1")
-    NOSTR_CONNECT_GRPC_BINDING_PORT = int(os.getenv('NOSTR_CONNECT_GRPC_BINDING_PORT', "5000"))
+    NOSTR_CONNECT_GRPC_BINDING_ADDRESS = os.getenv('POOL_ADDRESS', "127.0.0.1")
+    NOSTR_CONNECT_GRPC_BINDING_PORT = int(os.getenv('POOL_PORT', "5000"))
     t = Translator(DEVICE)
     while True:
         try:
@@ -93,6 +148,7 @@ def main():
                 log(stub, "Connected to "+NOSTR_CONNECT_GRPC_BINDING_ADDRESS+":"+str(NOSTR_CONNECT_GRPC_BINDING_PORT))
                 while True:
                     try:
+                        announce(stub)
                         completePendingJob(stub, t)
                     except Exception as e:
                         log(stub, "Error processing pending jobs "+ str(e), None)
