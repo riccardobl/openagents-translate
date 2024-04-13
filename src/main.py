@@ -91,6 +91,13 @@ TEMPLATES = [
                 ["param","run-on", "openagents/translate" ],              
                 ["param", "source_language", "%SOURCE_LANG%"],
                 ["param", "target_language", "%TARGET_LANG%" ],
+                ["name", "Translate Action"],
+                ["about", "Translate text from source language to target language"],
+                ["tos", ""],
+                ["privacy", ""],
+                ["author", ""],
+                ["web", ""],
+                ["picture", ""],
                 ["i","%INPUT%"]
             ]
         }
@@ -103,7 +110,14 @@ TEMPLATES = [
             "kind": 5002,
             "tags": [
                 ["param","language","%TARGET_LANG%"],
-                [ "i", "%INPUT%" ]
+                [ "i", "%INPUT%" ],
+                ["name", "Translate Action"],
+                ["about", "Translate text to target language"],
+                ["tos", ""],
+                ["privacy", ""],
+                ["author", ""],
+                ["web", ""],
+                ["picture", ""],
             ]
         }
         """
