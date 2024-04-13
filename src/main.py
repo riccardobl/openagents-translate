@@ -84,8 +84,7 @@ def completePendingJob(rpcClient , translator):
 TEMPLATES = [
     {
         "nextAnnouncementTimestamp":0,
-        "template":"""
-        {
+        "template":"""{
             "kind": 5003,
             "tags": [
                 ["param","run-on", "openagents/translate" ],              
@@ -105,8 +104,7 @@ TEMPLATES = [
     },
     {
         "nextAnnouncementTimestamp":0,
-        "template":"""
-        {
+        "template":"""{
             "kind": 5002,
             "tags": [
                 ["param","language","%TARGET_LANG%"],
@@ -117,7 +115,7 @@ TEMPLATES = [
                 ["privacy", ""],
                 ["author", ""],
                 ["web", ""],
-                ["picture", ""],
+                ["picture", ""]
             ]
         }
         """
@@ -163,6 +161,10 @@ def main():
                 while True:
                     try:
                         announce(stub)
+                    except Exception as e:
+                        log(stub, "Error announcing node "+ str(e), None)
+
+                    try:
                         completePendingJob(stub, t)
                     except Exception as e:
                         log(stub, "Error processing pending jobs "+ str(e), None)
