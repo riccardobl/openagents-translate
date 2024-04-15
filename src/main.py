@@ -150,14 +150,14 @@ def announce(rpcClient):
 
 def main():
     DEVICE = int(os.getenv('TRANSFORMERS_DEVICE', "-1"))
-    NOSTR_CONNECT_GRPC_BINDING_ADDRESS = os.getenv('POOL_ADDRESS', "127.0.0.1")
-    NOSTR_CONNECT_GRPC_BINDING_PORT = int(os.getenv('POOL_PORT', "5000"))
+    POOL_ADDRESS = os.getenv('POOL_ADDRESS', "127.0.0.1")
+    POOL_PORT = int(os.getenv('POOL_PORT', "5000"))
     t = Translator(DEVICE)
     while True:
         try:
-            with grpc.insecure_channel(NOSTR_CONNECT_GRPC_BINDING_ADDRESS+":"+str(NOSTR_CONNECT_GRPC_BINDING_PORT)) as channel:
-                stub = rpc_pb2_grpc.NostrConnectorStub(channel)
-                log(stub, "Connected to "+NOSTR_CONNECT_GRPC_BINDING_ADDRESS+":"+str(NOSTR_CONNECT_GRPC_BINDING_PORT))
+            with grpc.insecure_channel(POOL_ADDRESS+":"+str(POOL_PORT)) as channel:
+                stub = rpc_pb2_grpc.PoolConnectorStub(channel)
+                log(stub, "Connected to "+POOL_ADDRESS+":"+str(POOL_PORT))
                 while True:
                     try:
                         announce(stub)
